@@ -4,11 +4,8 @@ import json
 import networkx as nx
 import matplotlib.pyplot as plt
 from pyvis.network import Network
-import pandas as pd
 import streamlit.components.v1 as components
-import random
-from random import *
-
+from tinydb import TinyDB, Query
 
 st.title('Data usage questionaire')
 
@@ -23,13 +20,26 @@ user_bs_select = st.selectbox(
 st.subheader('1. Most relevant data sources')
 
 #read from json_file
-with open('apps.json') as json_file:
-    apps = json.load(json_file)
+db = TinyDB('db.json')
+apps_table = db.table('apps')
+
+if len(apps_table) == 0:
+    apps_table.insert_multiple([
+        {"text": "t/track", "value": 1},
+        {"text": "m/techlog", "value": 1},
+        {"text": "m/archive", "value": 1},
+        {"text": "m/archive", "value": 1},
+        {"text": "m/material", "value": 1},
+        {"text": "L/Stage", "value": 1},
+        {"text": "MAX", "value": 1},
+        {"text": "linX", "value": 1},
+        {"text": "Telos", "value": 1},
+        {"text": "SAP BW", "value": 1}])
 
 existing_apps = []
 
 #read existing app names
-for app in apps:
+for app in apps_table:
     existing_apps.append(app['text'])
 
 #sort app names
@@ -47,36 +57,36 @@ if st.checkbox('Not found your data source? Just add it.'):
     #add non-existing app via text input
     user_app_input = st.text_input('Add a new data source')
 
-    #ack dialoge
-    left_column, right_column = st.beta_columns(2)
-    added_button = left_column.button('Add')
-    if added_button:
-        right_column.write('Added data source ' + user_app_input)
-
-#ack dialoge
+#save dialog
 left_column, right_column = st.beta_columns(2)
 add_ds_button = left_column.button('Save', key=1)
 
 #check if app name exists
 if add_ds_button:
     found_app = False
-    for app in apps:
+
+    #upsert???
+
+    for app in apps_table:
         #update app value
         if (app['text'] == user_app_input) or (app['text'] in user_app_select):
             found_app = True
             app['value'] = app['value'] + 1
 
+            AppQuery = Query()
+            apps_table.update({'value': app['value']}, AppQuery.text == app['text'])
+
     #add app name
     if found_app == False:
-        apps.append(dict(text=user_app_input, value=1))
+        #add unknown app
+        apps_table.insert(dict(text=user_app_input, value=1))
 
-    #write to json_file
-    with open('apps.json', 'w') as json_file:
-        json.dump(apps, json_file)
-    right_column.write('Updated Wordcloud')
+        #user feedback that entry was saved
+        right_column.write('Updated Wordcloud')
+
 
 #show wordcloud
-word_cld = wordcloud.visualize(apps, tooltip_data_fields={
+word_cld = wordcloud.visualize(apps_table.all(), tooltip_data_fields={
     'text':'Data source', 'value':'Count'})
 
 #different charts
@@ -89,11 +99,17 @@ word_cld = wordcloud.visualize(apps, tooltip_data_fields={
 
 st.subheader('2. Most relevant data source connections')
 
+connections_table = db.table('connections')
 existing_connections = []
 
+if len(connections_table) == 0:
+    connections_table.insert_multiple([
+        {"from_app": "SAP BW", "to_app": "t/track", "value": 1},
+        {"from_app": "MAX", "to_app": "t/track", "value": 1}])
+
 #read connections
-with open('connections.json') as json_file:
-    existing_connections = json.load(json_file)
+for connection in connections_table:
+    existing_connections.append(connection)
 
 left_column, right_column = st.beta_columns(2)
 
@@ -120,25 +136,29 @@ if add_conn_button:
             found_conn = True
             conn['value'] = conn['value'] + 1
 
+            ConnQuery = Query()
+            connections_table.update({'value': conn['value']}, (ConnQuery.from_app == conn['from_app']) & (ConnQuery.to_app == conn['to_app']))
+
+            #acknowledge update
+            right_column.write('Updated existing connection')
+
     #add conn name
     if found_conn == False:
-        existing_connections.append(dict(from_app=user_app_from_conn_select, to_app=user_app_to_conn_select, value=1))
+        connections_table.insert(dict(from_app=user_app_from_conn_select, to_app=user_app_to_conn_select, value=1))
 
-    #write to json_file
-    with open('connections.json', 'w') as json_file:
-        json.dump(existing_connections, json_file)
-    right_column.write('Updated graph')
+        #acknowledge insert
+        right_column.write('Added new connection')
 
 #prepare network
 g = Network()
 
 #add nodes with votes
-for app in apps:
+for app in apps_table:
     g.add_node(app['text'], size=app['value']*10, borderWidth=3, title= app['text'] + ': ' + str(app['value']))
 
-#add random edges
-for conn in existing_connections:
-    g.add_edge(conn['from_app'], conn['to_app'], value=conn['value'], title= conn['value'], color='#FFAD00')
+#add edges
+for conn in connections_table:
+    g.add_edge(conn['from_app'], conn['to_app'], value=conn['value'], title= conn['value'])#, color='#FFAD00')
 
 g.show("basic.html")
 
