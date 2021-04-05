@@ -1,6 +1,8 @@
-networkx==2.5
-matplotlib==3.3.4
 streamlit==0.78.0
-streamlit_wordcloud==0.1.0
+matplotlib==3.3.4
+pandas==1.2.3
+plotly==4.14.3
 pyvis==0.1.9
+networkx==2.5
+streamlit_wordcloud==0.1.0
 tinydb==4.4.0
